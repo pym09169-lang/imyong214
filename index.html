@@ -70,7 +70,6 @@
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 100; }
         .modal-content { background: white; padding: 25px; border-radius: 12px; width: 680px; max-height: 85vh; overflow-y: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
         
-        /* 🌅 ☀️ 🌙 시간대 세션 스타일 추가 */
         .time-session-container { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 15px; }
         .time-session-title { font-size: 14px; font-weight: bold; color: #2d3748; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; border-left: 4px solid #3498db; padding-left: 8px; }
         .time-session-title.morning { border-left-color: #ff9800; }
@@ -235,7 +234,7 @@ function init() {
         if (saved) db = JSON.parse(saved);
         else db = JSON.parse(JSON.stringify(defaultDb));
         
-        let savedDiary = localStorage.getItem('imyong_diary_db_v7'); // 버전 관리 업그레이드
+        let savedDiary = localStorage.getItem('imyong_diary_db_v7');
         if (savedDiary) diaryDb = JSON.parse(savedDiary);
     } catch(e) {
         db = JSON.parse(JSON.stringify(defaultDb));
@@ -382,19 +381,17 @@ function changeMonth(direction) {
     renderCalendar(); 
 }
 
-/* 🎯 수정 포인트 1: 아침, 점심, 저녁 3대 세션으로 구분하여 모달창을 띄워주는 구조 구축 */
 function openDiaryModal(dateKey) {
     selectedDateKey = dateKey;
     let todayStr = new Date().toISOString().split('T')[0];
     let targetDate = new Date(dateKey + "T00:00:00"); let todayDate = new Date(todayStr + "T00:00:00");
     let diffDays = Math.ceil((targetDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
     
-    let ruleText = (diffDays === 1) ? "✓ 전날 계획 등록 찬스 (달성도 70% 이상 시 초록불 가능)" : (diffDays === 0) ? "⚠ 당일 계획 등록 (달성률 무관 초록불 절대 불가, 최대 노란불)" : (diffDays < 0) ? "⏳ 지난 날짜에 대한 사후 기록 모드" : "📅 미래 스케줄 미리 등록 중";
+    let ruleText = (diffDays === 1) ? "✓ 전날 계획 등록 찬스 (달성도 70% 이상 시 초록불 가능)" : (diffDays === 0) ? "⚠️ 당일 계획 등록 (달성률 무관 초록불 절대 불가, 최대 노란불)" : (diffDays < 0) ? "⏳ 지난 날짜에 대한 사후 기록 모드" : "📅 미래 스케줄 미리 등록 중";
 
     document.getElementById('diary-modal-date').innerText = `📋 ${dateKey} 플래너 관리`;
     document.getElementById('diary-modal-rule-info').innerText = ruleText;
     
-    // 각 세션 초기화
     document.getElementById('session-wrapper-morning').innerHTML = "";
     document.getElementById('session-wrapper-afternoon').innerHTML = "";
     document.getElementById('session-wrapper-evening').innerHTML = "";
@@ -402,13 +399,11 @@ function openDiaryModal(dateKey) {
     let record = diaryDb[dateKey] || { todos: [], achieve: 0, isPrePlanned: false };
     
     if (record.todos.length === 0) {
-        // 데이터가 전혀 없을 때 기본 행 매칭
         addNewTodoRowToSession('morning', '', false, '', '', 100);
         addNewTodoRowToSession('afternoon', '', false, '', '', 100);
         addNewTodoRowToSession('evening', '', false, '', '', 100);
     } else {
         record.todos.forEach(t => {
-            // 구버전 데이터 호환 혹은 지정 세션이 없으면 무조건 'morning'으로 대응
             let session = t.session || 'morning';
             addNewTodoRowToSession(session, t.text, t.done, t.subject, t.element, t.amount || 100);
         });
@@ -417,12 +412,11 @@ function openDiaryModal(dateKey) {
     document.getElementById('diaryModal').style.display = "flex";
 }
 
-/* 🎯 수정 포인트 2: 특정 세션 영역에만 새로운 할 일 열을 추가해주는 타겟형 빌더 함수 구성 */
 function addNewTodoRowToSession(session, textValue = '', isChecked = false, savedSubject = '', savedElement = '', savedAmount = 100) {
     const wrapper = document.getElementById(`session-wrapper-${session}`);
     let rowId = 'todo_row_' + Date.now() + Math.floor(Math.random() * 1000);
     let div = document.createElement('div'); div.className = "todo-item-row"; div.id = rowId;
-    div.setAttribute('data-session', session); // 세션태그 저장
+    div.setAttribute('data-session', session);
     
     let subjectOptions = `<option value="">--과목선택--</option>`;
     for (let type in db) { 
@@ -541,7 +535,6 @@ function closeDiaryModal() {
 }
 function closeModal() { document.getElementById('editModal').style.display = "none"; }
 
-/* 🎯 수정 포인트 3: 저장 시 각 할 일의 세션(아침/점심/저녁) 정보까지 함께 배열로 패킹 저장 */
 function saveDiaryDay() {
     const rows = document.querySelectorAll('#diaryModal .todo-item-row');
     let todos = []; let total = 0; let checked = 0;
@@ -549,7 +542,7 @@ function saveDiaryDay() {
     rows.forEach(row => {
         let text = row.querySelector('input[type="text"]').value.trim();
         let done = row.querySelector('input[type="checkbox"]').checked;
-        let session = row.getAttribute('data-session'); // 바인딩된 세션 이름 가져오기
+        let session = row.getAttribute('data-session');
         let selects = row.querySelectorAll('select');
         let subject = selects[0].value; let element = selects[1].value; let amount = parseInt(selects[2].value) || 100;
         
@@ -559,7 +552,7 @@ function saveDiaryDay() {
             todos.push({ 
                 text: text, 
                 done: done, 
-                session: session, // 데이터에 세션 추가 명시
+                session: session, 
                 subject: subject, 
                 element: element, 
                 amount: amount 
