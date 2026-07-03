@@ -84,6 +84,14 @@
         .todo-amount-select { padding: 6px; border-radius: 6px; border: 1px solid #cbd5e0; font-size: 13px; width: 75px; font-weight: bold; color: #2b6cb0; background: #ebf8ff; }
         .btn-del-todo { background: #e53e3e; color: white; border: none; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: bold; }
         .modal-score-status { background: #edf2f7; padding: 12px; border-radius: 8px; font-weight: bold; font-size: 14px; margin-top: 15px; display: flex; justify-content: space-between; }
+
+        /* 📋 습관 설정 영역 스타일 */
+        .habit-config-box { background: #fffaf0; border: 1px dashed #fbd38d; border-radius: 8px; padding: 12px; margin-bottom: 15px; }
+        .habit-config-title { font-size: 13px; font-weight: bold; color: #dd6b20; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .habit-input-container { display: flex; flex-direction: column; gap: 6px; }
+        .habit-input-row { display: flex; gap: 6px; align-items: center; }
+        .habit-input-row select { padding: 4px; font-size: 12px; border-radius: 4px; border: 1px solid #cbd5e0; }
+        .habit-input-row input { flex: 1; padding: 4px 8px; font-size: 12px; border-radius: 4px; border: 1px solid #cbd5e0; }
     </style>
 </head>
 <body>
@@ -148,6 +156,15 @@
         <h3 id="diary-modal-date">📅 일지 관리</h3>
         <p id="diary-modal-rule-info" style="font-size:12px; color:#e53e3e; font-weight:bold; margin-bottom: 15px;"></p>
         
+        <!-- ⚙️ 루틴/습관 설정 컨테이너 추가 -->
+        <div class="habit-config-box">
+            <div class="habit-config-title">
+                <span>⭐ 매일 반복할 고정 습관 설정 (새로운 일지 개설 시 자동 반영)</span>
+                <button class="btn-secondary" style="background:#dd6b20; margin:0; padding:3px 8px;" onclick="addNewHabitSettingRow()">+ 습관 추가</button>
+            </div>
+            <div class="habit-input-container" id="habit-settings-wrapper"></div>
+        </div>
+
         <div class="time-session-container">
             <div class="time-session-title morning">
                 <span>🌅 아침 세션 (09:00 - 12:00)</span>
@@ -218,6 +235,7 @@ const defaultDb = {
 
 let db = {};
 let diaryDb = {}; 
+let habitRules = []; // 고정 습관 저장용 전역 배열
 let currentChart = null;
 let currentView = "main"; 
 let currentType = "학습일지"; 
@@ -236,8 +254,17 @@ function init() {
         
         let savedDiary = localStorage.getItem('imyong_diary_db_v7');
         if (savedDiary) diaryDb = JSON.parse(savedDiary);
+
+        // 💾 로컬 스토리지에서 습관 데이터 불러오기
+        let savedHabits = localStorage.getItem('imyong_habit_rules_v1');
+        if (savedHabits) habitRules = JSON.parse(savedHabits);
+        else habitRules = [
+            { session: "morning", text: "🏃 아침 러닝 및 체력 관리" },
+            { session: "afternoon", text: "📖 교육과정 암기 및 백지 복습" }
+        ]; // 초기 예시 데이터
     } catch(e) {
         db = JSON.parse(JSON.stringify(defaultDb));
+        habitRules = [];
     }
     
     calculateDDay();
@@ -392,6 +419,9 @@ function openDiaryModal(dateKey) {
     document.getElementById('diary-modal-date').innerText = `📋 ${dateKey} 플래너 관리`;
     document.getElementById('diary-modal-rule-info').innerText = ruleText;
     
+    // ⚙️ 등록된 습관 관리 에디터 렌더링
+    renderHabitSettings();
+
     document.getElementById('session-wrapper-morning').innerHTML = "";
     document.getElementById('session-wrapper-afternoon').innerHTML = "";
     document.getElementById('session-wrapper-evening').innerHTML = "";
@@ -399,9 +429,18 @@ function openDiaryModal(dateKey) {
     let record = diaryDb[dateKey] || { todos: [], achieve: 0, isPrePlanned: false };
     
     if (record.todos.length === 0) {
-        addNewTodoRowToSession('morning', '', false, '', '', 100);
-        addNewTodoRowToSession('afternoon', '', false, '', '', 100);
-        addNewTodoRowToSession('evening', '', false, '', '', 100);
+        // 완전히 비어있는 신규 일지 개설 시, 등록된 고정 습관이 있다면 해당 내용을 먼저 주입
+        if (habitRules.length > 0) {
+            habitRules.forEach(hr => {
+                if (hr.text.trim()) {
+                    addNewTodoRowToSession(hr.session, hr.text, false, '', '', 100);
+                }
+            });
+        }
+        // 각 세션이 여전히 완전히 비어있다면, 최소 하나의 입력 행 제공
+        if (document.getElementById('session-wrapper-morning').children.length === 0) addNewTodoRowToSession('morning', '', false, '', '', 100);
+        if (document.getElementById('session-wrapper-afternoon').children.length === 0) addNewTodoRowToSession('afternoon', '', false, '', '', 100);
+        if (document.getElementById('session-wrapper-evening').children.length === 0) addNewTodoRowToSession('evening', '', false, '', '', 100);
     } else {
         record.todos.forEach(t => {
             let session = t.session || 'morning';
@@ -410,6 +449,49 @@ function openDiaryModal(dateKey) {
     }
     recalcModalProgress();
     document.getElementById('diaryModal').style.display = "flex";
+}
+
+/* ⚙️ 습관 에디터 렌더링 함수 추가 */
+function renderHabitSettings() {
+    const container = document.getElementById('habit-settings-wrapper');
+    container.innerHTML = "";
+    habitRules.forEach((hr, idx) => {
+        let div = document.createElement('div');
+        div.className = "habit-input-row";
+        div.innerHTML = `
+            <select onchange="updateHabitRule(${idx}, 'session', this.value)">
+                <option value="morning" ${hr.session === 'morning' ? 'selected' : ''}>🌅 아침</option>
+                <option value="afternoon" ${hr.session === 'afternoon' ? 'selected' : ''}>☀️ 점심</option>
+                <option value="evening" ${hr.session === 'evening' ? 'selected' : ''}>🌙 저녁</option>
+            </select>
+            <input type="text" value="${hr.text}" placeholder="예: 매일 교육과정 1시간 암기" onchange="updateHabitRule(${idx}, 'text', this.value)">
+            <button class="btn-secondary" style="background:#e53e3e; margin:0;" onclick="removeHabitRule(${idx})">삭제</button>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function addNewHabitSettingRow() {
+    habitRules.push({ session: "morning", text: "" });
+    renderHabitSettings();
+    saveHabitRulesToStorage();
+}
+
+function updateHabitRule(index, field, value) {
+    if (habitRules[index]) {
+        habitRules[index][field] = value;
+        saveHabitRulesToStorage();
+    }
+}
+
+function removeHabitRule(index) {
+    habitRules.splice(index, 1);
+    renderHabitSettings();
+    saveHabitRulesToStorage();
+}
+
+function saveHabitRulesToStorage() {
+    localStorage.setItem('imyong_habit_rules_v1', JSON.stringify(habitRules));
 }
 
 function addNewTodoRowToSession(session, textValue = '', isChecked = false, savedSubject = '', savedElement = '', savedAmount = 100) {
@@ -656,7 +738,7 @@ function saveCustomStructure() {
     });
     db[currentType][activeSub].elements = newElements; localStorage.setItem('imyong_db_v4', JSON.stringify(db)); closeModal(); if(currentType!=='학습일지') init(); else switchType('학습일지');
 }
-function resetAllData() { if(confirm("학습 일지를 포함한 모든 데이터를 초기화하시겠습니까?")) { localStorage.removeItem('imyong_db_v4'); localStorage.removeItem('imyong_diary_db_v7'); location.reload(); } }
+function resetAllData() { if(confirm("학습 일지 및 고정 습관을 포함한 모든 데이터를 초기화하시겠습니까?")) { localStorage.removeItem('imyong_db_v4'); localStorage.removeItem('imyong_diary_db_v7'); localStorage.removeItem('imyong_habit_rules_v1'); location.reload(); } }
 
 function renderMainChart() {
     currentView = "main"; if (typeof Chart !== "function") return;
